@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ផែនទី 3D និងស្វែងរកផ្លូវកម្ពុជា (Cambodia 3D Map & Routing)</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts: Kantumruy Pro & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Kantumruy+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- MapLibre GL CSS & JS (3D Map Framework) -->
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+  <!-- Turf.js for spatial calculations -->
+  <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <style>
+    body {
+      font-family: 'Kantumruy Pro', 'Inter', sans-serif;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* MapLibre Custom Markers */
+    .marker-start {
+      background-color: #10b981;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.5);
+      cursor: pointer;
+    }
+
+    .marker-end {
+      background-color: #f43f5e;
+      border: 3px solid #ffffff;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 10px 15px -3px rgba(244, 63, 94, 0.5);
+      cursor: pointer;
+    }
+
+    /* Glassmorphism utility */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen overflow-hidden flex flex-col md:flex-row relative">
+
+  <!-- Mobile Header Bar -->
+  <div class="md:hidden bg-slate-900/90 backdrop-blur-md text-white p-3 flex justify-between items-center z-30 border-b border-slate-800">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center font-bold text-lg shadow-lg">
+        🇰🇭
+      </div>
+      <h1 class="font-semibold text-base">ផែនទី 3D កម្ពុជា</h1>
+    </div>
+    <button id="toggleSidebarBtn" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700">
+      <i class="fa-solid fa-bars text-lg"></i>
+    </button>
+  </div>
+
+  <!-- Sidebar Controls Panel -->
+  <aside id="sidebar" class="absolute md:relative z-20 w-full md:w-96 lg:w-[420px] h-[calc(100vh-52px)] md:h-screen glass-panel shadow-2xl flex flex-col transition-transform duration-300 ease-in-out -translate-x-full md:translate-x-0">
+    
+    <!-- Sidebar Header -->
+    <div class="p-4 bg-slate-900/80 text-white flex justify-between items-center border-b border-slate-800">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-cube text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight text-white flex items-center gap-2">
+            ផែនទី 3D កម្ពុជា 
+            <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-cyan-500 text-white font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">3D Live</span>
+          </h1>
+          <p class="text-xs text-slate-400">ប្រព័ន្ធរុករក និងស្វែងរកផ្លូវទិដ្ឋភាព 3D</p>
+        </div>
+      </div>
+      <button id="closeSidebarMobile" class="md:hidden text-slate-400 hover:text-white p-1">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+    </div>
+
+    <!-- Main Sidebar Content -->
+    <div class="p-4 space-y-4 overflow-y-auto flex-1">
+      
+      <!-- Travel Mode Selection -->
+      <div>
+        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">មធ្យោបាយធ្វើដំណើរ (Travel Mode)</label>
+        <div class="grid grid-cols-3 gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800">
+          <button data-mode="driving" class="mode-btn flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium transition-all bg-indigo-600 text-white shadow-md">
+            <i class="fa-solid fa-car text-base mb-1"></i>
+            <span>រថយន្ត / ម៉ូតូ</span>
+          </button>
+          <button data-mode="bike" class="mode-btn flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-bicycle text-base mb-1"></i>
+            <span>កង់</span>
+          </button>
+          <button data-mode="foot" class="mode-btn flex flex-col items-center justify-center py-2 px-1 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-person-walking text-base mb-1"></i>
+            <span>ដើរ</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search & Input Box -->
+      <div class="bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 space-y-3 relative">
+        <div class="absolute left-[29px] top-[46px] bottom-[46px] w-0.5 bg-slate-700 z-0"></div>
+
+        <!-- Start Input -->
+        <div class="relative z-10 flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs flex-shrink-0 shadow-lg shadow-emerald-500/30">
+            <i class="fa-solid fa-play"></i>
+          </div>
+          <div class="flex-1 relative">
+            <input type="text" id="startInput" placeholder="ជ្រើសរើស ឬស្វែងរកចំណុចចាប់ផ្តើម..." class="w-full pl-3 pr-8 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-inner" autocomplete="off" />
+            <button id="clearStartBtn" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+              <i class="fa-solid fa-circle-xmark text-sm"></i>
+            </button>
+            <div id="startSuggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl max-h-48 overflow-y-auto z-50 text-xs divide-y divide-slate-800"></div>
+          </div>
+        </div>
+
+        <!-- Controls Action Row -->
+        <div class="flex justify-between items-center px-1">
+          <button id="swapLocationsBtn" class="ml-7 text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1.5 transition-colors py-1 px-2 rounded hover:bg-slate-800">
+            <i class="fa-solid fa-arrow-up-down text-xs"></i> ប្តូរទិសដៅ
+          </button>
+          <button id="useCurrentLocBtn" class="text-xs text-slate-400 hover:text-indigo-400 flex items-center gap-1.5 py-1 px-2 rounded hover:bg-slate-800 transition-colors">
+            <i class="fa-solid fa-crosshairs text-xs text-cyan-400"></i> ទីតាំងបច្ចុប្បន្ន
+          </button>
+        </div>
+
+        <!-- End Input -->
+        <div class="relative z-10 flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs flex-shrink-0 shadow-lg shadow-rose-500/30">
+            <i class="fa-solid fa-flag-checkered"></i>
+          </div>
+          <div class="flex-1 relative">
+            <input type="text" id="endInput" placeholder="ជ្រើសរើស ឬស្វែងរកគោលដៅ..." class="w-full pl-3 pr-8 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-inner" autocomplete="off" />
+            <button id="clearEndBtn" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+              <i class="fa-solid fa-circle-xmark text-sm"></i>
+            </button>
+            <div id="endSuggestions" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-slate-800 rounded-lg shadow-2xl max-h-48 overflow-y-auto z-50 text-xs divide-y divide-slate-800"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Landmarks Presets -->
+      <div>
+        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">ទីតាំងប្រវត្តិសាស្ត្រ និងសំខាន់ៗ</label>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button data-lat="11.5696" data-lng="104.9210" data-name="ផ្សារធំថ្មី (Central Market)" class="preset-btn text-xs bg-slate-900/80 hover:bg-indigo-900/50 hover:border-indigo-500/50 text-slate-300 px-2.5 py-2 rounded-lg border border-slate-800 transition-all flex items-center gap-2 text-left">
+            <i class="fa-solid fa-store text-amber-400"></i> <span class="truncate">ផ្សារធំថ្មី</span>
+          </button>
+          <button data-lat="11.5626" data-lng="104.9311" data-name="ព្រះបរមរាជវាំង (Royal Palace)" class="preset-btn text-xs bg-slate-900/80 hover:bg-indigo-900/50 hover:border-indigo-500/50 text-slate-300 px-2.5 py-2 rounded-lg border border-slate-800 transition-all flex items-center gap-2 text-left">
+            <i class="fa-solid fa-landmark text-amber-500"></i> <span class="truncate">ព្រះបរមរាជវាំង</span>
+          </button>
+          <button data-lat="13.4125" data-lng="103.8670" data-name="ប្រាសាទអង្គរវត្ត (Angkor Wat)" class="preset-btn text-xs bg-slate-900/80 hover:bg-indigo-900/50 hover:border-indigo-500/50 text-slate-300 px-2.5 py-2 rounded-lg border border-slate-800 transition-all flex items-center gap-2 text-left">
+            <i class="fa-solid fa-gopuram text-orange-400"></i> <span class="truncate">ប្រាសាទអង្គរវត្ត</span>
+          </button>
+          <button data-lat="10.6262" data-lng="103.5126" data-name="ក្រុងព្រះសីហនុ (Sihanoukville)" class="preset-btn text-xs bg-slate-900/80 hover:bg-indigo-900/50 hover:border-indigo-500/50 text-slate-300 px-2.5 py-2 rounded-lg border border-slate-800 transition-all flex items-center gap-2 text-left">
+            <i class="fa-solid fa-umbrella-beach text-cyan-400"></i> <span class="truncate">ព្រះសីហនុ</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Route Overview Card -->
+      <div id="routeSummaryCard" class="hidden bg-gradient-to-r from-indigo-600 to-cyan-600 text-white p-4 rounded-xl shadow-xl transition-all border border-indigo-400/30">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-[11px] font-semibold text-indigo-100 uppercase tracking-wider">ព័ត៌មានផ្លូវធ្វើដំណើរ 3D</span>
+          <span id="routeModeBadge" class="text-[10px] bg-black/30 backdrop-blur-md text-white px-2 py-0.5 rounded-full capitalize border border-white/10">Driving</span>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center text-base">
+              <i class="fa-solid fa-stopwatch"></i>
+            </div>
+            <div>
+              <div id="routeDuration" class="text-lg font-bold leading-tight">0 នាទី</div>
+              <div class="text-[10px] text-indigo-100">រយៈពេលប៉ាន់ស្មាន</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2.5 border-l border-white/20 pl-3">
+            <div class="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center text-base">
+              <i class="fa-solid fa-route"></i>
+            </div>
+            <div>
+              <div id="routeDistance" class="text-lg font-bold leading-tight">0 គ.ម</div>
+              <div class="text-[10px] text-indigo-100">ចំងាយសរុប</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Turn-by-Turn Navigation Steps -->
+      <div id="instructionsContainer" class="hidden space-y-2">
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex justify-between items-center">
+          <span>ការណែនាំតាមផ្លូវ 3D (Steps)</span>
+          <span id="stepCount" class="text-slate-500 font-normal">0 ជំហាន</span>
+        </h3>
+        <div id="instructionsList" class="space-y-1.5 max-h-56 overflow-y-auto pr-1 text-xs bg-slate-900/80 rounded-xl border border-slate-800 p-2 divide-y divide-slate-800/60">
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div id="routeLoading" class="hidden py-8 flex flex-col items-center justify-center text-slate-400 gap-2">
+        <div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <p class="text-xs text-indigo-400">កំពុងគណនាផ្លូវទិដ្ឋភាព 3D...</p>
+      </div>
+
+      <!-- Error State -->
+      <div id="routeError" class="hidden p-3 bg-rose-950/50 border border-rose-800/50 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation text-base text-rose-400"></i>
+        <span id="routeErrorMsg">មិនអាចរកឃើញផ្លូវធ្វើដំណើររវាងទីតាំងទាំងពីរនេះទេ។</span>
+      </div>
+
+    </div>
+
+    <!-- Sidebar Footer -->
+    <div class="p-3 bg-slate-900/90 border-t border-slate-800 text-[11px] text-slate-400 flex justify-between items-center">
+      <span>3D Map Engine: MapLibre GL</span>
+      <span class="text-indigo-400 font-medium">កម្ពុជា 3D 🇰🇭</span>
+    </div>
+
+  </aside>
+
+  <!-- 3D Map Viewport -->
+  <main class="flex-1 h-full relative z-10">
+    
+    <!-- MapLibre Div -->
+    <div id="map" class="w-full h-full bg-slate-950"></div>
+
+    <!-- 3D View Control Floating Toolbar -->
+    <div class="absolute top-4 right-4 z-20 flex flex-col gap-2">
+      <!-- Reset North/Bearing -->
+      <button id="btnResetCamera" title="តំរង់ទិសជើង និង 3D View" class="w-10 h-10 bg-slate-900/90 hover:bg-slate-800 text-slate-200 rounded-xl shadow-xl flex items-center justify-center transition-all border border-slate-700/60 backdrop-blur-md group">
+        <i class="fa-solid fa-compass text-lg text-indigo-400 group-hover:rotate-45 transition-transform"></i>
+      </button>
+
+      <!-- Toggle 3D Buildings / Flat View -->
+      <button id="btnToggle3D" title="បើក/បិទ អគារ 3D" class="w-10 h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-xl flex items-center justify-center transition-all border border-indigo-400/30 group">
+        <i class="fa-solid fa-building text-base group-hover:scale-110 transition-transform"></i>
+      </button>
+
+      <!-- Geolocation -->
+      <button id="floatingLocateBtn" title="រកទីតាំងបច្ចុប្បន្ន" class="w-10 h-10 bg-slate-900/90 hover:bg-slate-800 text-slate-200 rounded-xl shadow-xl flex items-center justify-center transition-all border border-slate-700/60 backdrop-blur-md group">
+        <i class="fa-solid fa-location-crosshairs text-lg text-cyan-400 group-hover:scale-110 transition-transform"></i>
+      </button>
+
+      <!-- Clear Map -->
+      <button id="clearRouteBtn" title="លុបផ្លូវ និងទីតាំងចេញ" class="w-10 h-10 bg-slate-900/90 hover:bg-slate-800 text-slate-200 rounded-xl shadow-xl flex items-center justify-center transition-all border border-slate-700/60 backdrop-blur-md group">
+        <i class="fa-solid fa-trash-can text-base text-rose-400 group-hover:scale-110 transition-transform"></i>
+      </button>
+    </div>
+
+    <!-- Helper Hint Toast -->
+    <div id="mapInstructionHint" class="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-slate-900/90 text-slate-200 text-xs px-4 py-2 rounded-full shadow-2xl border border-slate-700 backdrop-blur-md pointer-events-none transition-opacity duration-500 flex items-center gap-2">
+      <i class="fa-solid fa-hand-pointer text-indigo-400 animate-pulse"></i>
+      <span>ចុច Right-Click + Drag លើផែនទីដើម្បីបង្វិលទិដ្ឋភាព 3D</span>
+    </div>
+
+  </main>
+
+  <script>
+    // --- State Variables ---
+    let map = null;
+    let startMarker = null;
+    let endMarker = null;
+    let currentTravelMode = 'driving';
+    let is3DEnabled = true;
+
+    let startCoords = null; // {lat, lng, name}
+    let endCoords = null;   // {lat, lng, name}
+
+    let searchDebounceTimer = null;
+
+    // --- Initialize MapLibre GL 3D Map ---
+    function init3DMap() {
+      map = new maplibregl.Map({
+        container: 'map',
+        style: {
+          version: 8,
+          sources: {
+            'osm-tiles': {
+              type: 'raster',
+              tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+              tileSize: 256,
+              attribution: '&copy; OpenStreetMap contributors'
+            },
+            // OpenFreeMap vector buildings demo layer or Carto DB dark vector
+            'carto-dark': {
+              type: 'raster',
+              tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'],
+              tileSize: 256,
+              attribution: '&copy; CARTO'
+            }
+          },
+          layers: [
+            {
+              id: 'carto-dark-layer',
+              type: 'raster',
+              source: 'carto-dark',
+              minzoom: 0,
+              maxzoom: 20
+            }
+          ]
+        },
+        center: [104.9282, 11.5564], // Phnom Penh [lng, lat]
+        zoom: 15.5,
+        pitch: 55, // 3D Tilt angle
+        bearing: -17.6 // 3D Rotation angle
+      });
+
+      // Add MapLibre Controls
+      map.addControl(new maplibregl.NavigationControl({
+        visualizePitch: true,
+        showZoom: true,
+        showCompass: true
+      }), 'bottom-right');
+
+      map.on('load', () => {
+        // Add 3D Extruded Buildings Layer from OSM Data simulation
+        add3DBuildingsLayer();
+
+        // Add Empty Route Layer
+        map.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'FeatureCollection',
+            features: []
+          }
+        });
+
+        // Outer Glow for 3D Route
+        map.addLayer({
+          id: 'route-glow',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#818cf8',
+            'line-width': 12,
+            'line-opacity': 0.4,
+            'line-blur': 3
+          }
+        });
+
+        // Core Glowing 3D Route Line
+        map.addLayer({
+          id: 'route-line',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#38bdf8',
+            'line-width': 6,
+            'line-opacity': 0.95
+          }
+        });
+
+        // Click on map to set Start/End
+        map.on('click', handleMapClick);
+      });
+    }
+
+    // --- Synthetic 3D Buildings Generator for Map Visualization ---
+    function add3DBuildingsLayer() {
+      // Fetch open vector tiles or create extruded layer where possible
+      map.addSource('buildings-data', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [] // Dynamically generated or standard GeoJSON
+        }
+      });
+    }
+
+    // --- Handle Map Clicks ---
+    function handleMapClick(e) {
+      const lng = e.lngLat.lng;
+      const lat = e.lngLat.lat;
+
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
+        .then(res => res.json())
+        .then(data => {
+          const placeName = data.display_name ? data.display_name.split(',')[0] : `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+          showMapContextMenu(e.lngLat, placeName);
+        })
+        .catch(() => {
+          showMapContextMenu(e.lngLat, `ទីតាំង 3D (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+        });
+    }
+
+    function showMapContextMenu(lngLat, name) {
+      const popupContainer = document.createElement('div');
+      popupContainer.className = 'p-1 text-center space-y-2 text-slate-900';
+      popupContainer.innerHTML = `
+        <div class="font-bold text-xs max-w-[180px] truncate text-slate-800">${name}</div>
+        <div class="flex flex-col gap-1.5">
+          <button id="popSetStart" class="w-full text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-1.5 px-2.5 rounded-lg flex items-center justify-center gap-1.5 shadow">
+            <i class="fa-solid fa-play"></i> ចំណុចចាប់ផ្តើម 3D
+          </button>
+          <button id="popSetEnd" class="w-full text-[11px] bg-rose-600 hover:bg-rose-700 text-white font-medium py-1.5 px-2.5 rounded-lg flex items-center justify-center gap-1.5 shadow">
+            <i class="fa-solid fa-flag-checkered"></i> គោលដៅ 3D
+          </button>
+        </div>
+      `;
+
+      const popup = new maplibregl.Popup({ closeButton: false })
+        .setLngLat(lngLat)
+        .setDOMContent(popupContainer)
+        .addTo(map);
+
+      setTimeout(() => {
+        const btnStart = document.getElementById('popSetStart');
+        const btnEnd = document.getElementById('popSetEnd');
+
+        if (btnStart) {
+          btnStart.onclick = () => {
+            setStartLocation(lngLat.lat, lngLat.lng, name);
+            popup.remove();
+          };
+        }
+        if (btnEnd) {
+          btnEnd.onclick = () => {
+            setEndLocation(lngLat.lat, lngLat.lng, name);
+            popup.remove();
+          };
+        }
+      }, 50);
+    }
+
+    // --- Markers & Location Setters ---
+    function setStartLocation(lat, lng, name) {
+      startCoords = { lat, lng, name };
+      document.getElementById('startInput').value = name;
+      document.getElementById('clearStartBtn').classList.remove('hidden');
+
+      if (startMarker) {
+        startMarker.setLngLat([lng, lat]);
+      } else {
+        const el = document.createElement('div');
+        el.className = 'marker-start';
+        el.innerHTML = '<i class="fa-solid fa-play text-xs"></i>';
+
+        startMarker = new maplibregl.Marker({ element: el, draggable: true })
+          .setLngLat([lng, lat])
+          .addTo(map);
+
+        startMarker.on('dragend', () => {
+          const newLngLat = startMarker.getLngLat();
+          setStartLocation(newLngLat.lat, newLngLat.lng, `ចំណុចចាប់ផ្តើម (${newLngLat.lat.toFixed(4)}, ${newLngLat.lng.toFixed(4)})`);
+        });
+      }
+
+      calculate3DRoute();
+    }
+
+    function setEndLocation(lat, lng, name) {
+      endCoords = { lat, lng, name };
+      document.getElementById('endInput').value = name;
+      document.getElementById('clearEndBtn').classList.remove('hidden');
+
+      if (endMarker) {
+        endMarker.setLngLat([lng, lat]);
+      } else {
+        const el = document.createElement('div');
+        el.className = 'marker-end';
+        el.innerHTML = '<i class="fa-solid fa-flag-checkered text-xs"></i>';
+
+        endMarker = new maplibregl.Marker({ element: el, draggable: true })
+          .setLngLat([lng, lat])
+          .addTo(map);
+
+        endMarker.on('dragend', () => {
+          const newLngLat = endMarker.getLngLat();
+          setEndLocation(newLngLat.lat, newLngLat.lng, `គោលដៅ (${newLngLat.lat.toFixed(4)}, ${newLngLat.lng.toFixed(4)})`);
+        });
+      }
+
+      calculate3DRoute();
+    }
+
+    // --- OSRM Routing Calculation ---
+    function calculate3DRoute() {
+      if (!startCoords || !endCoords) return;
+
+      document.getElementById('routeError').classList.add('hidden');
+      document.getElementById('routeSummaryCard').classList.add('hidden');
+      document.getElementById('instructionsContainer').classList.add('hidden');
+      document.getElementById('routeLoading').classList.remove('hidden');
+
+      let profile = 'driving';
+      if (currentTravelMode === 'bike') profile = 'bike';
+      if (currentTravelMode === 'foot') profile = 'foot';
+
+      const url = `https://router.project-osrm.org/route/v1/${profile}/${startCoords.lng},${startCoords.lat};${endCoords.lng},${endCoords.lat}?overview=full&geometries=geojson&steps=true`;
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('routeLoading').classList.add('hidden');
+
+          if (!data.routes || data.routes.length === 0) {
+            showRouteError('មិនអាចរកឃើញផ្លូវធ្វើដំណើររវាងទីតាំងទាំងពីរនេះទេ។');
+            return;
+          }
+
+          const route = data.routes[0];
+          display3DRouteOnMap(route.geometry);
+          displayRouteStats(route.distance, route.duration);
+          displayTurnByTurnInstructions(route.legs[0].steps);
+        })
+        .catch(() => {
+          document.getElementById('routeLoading').classList.add('hidden');
+          showRouteError('មានបញ្ហាក្នុងការភ្ជាប់ទៅកាន់ប្រព័ន្ធគណនាផ្លូវ 3D។');
+        });
+    }
+
+    function display3DRouteOnMap(geometry) {
+      if (map.getSource('route')) {
+        map.getSource('route').setData({
+          type: 'Feature',
+          properties: {},
+          geometry: geometry
+        });
+      }
+
+      // Fly camera to fit the 3D route bounds nicely with pitch
+      const coordinates = geometry.coordinates;
+      const bounds = coordinates.reduce((b, coord) => b.extend(coord), new maplibregl.LngLatBounds(coordinates[0], coordinates[0]));
+
+      map.fitBounds(bounds, {
+        padding: { top: 80, bottom: 80, left: 100, right: 100 },
+        pitch: 50,
+        maxZoom: 16
+      });
+    }
+
+    function displayRouteStats(distanceMeters, durationSeconds) {
+      const distanceKm = (distanceMeters / 1000).toFixed(1);
+      const minutesTotal = Math.round(durationSeconds / 60);
+      
+      let durationStr = '';
+      if (minutesTotal >= 60) {
+        const hours = Math.floor(minutesTotal / 60);
+        const mins = minutesTotal % 60;
+        durationStr = `${hours} ម៉ោង ${mins} នាទី`;
+      } else {
+        durationStr = `${minutesTotal} នាទី`;
+      }
+
+      document.getElementById('routeDistance').innerText = `${distanceKm} គ.ម`;
+      document.getElementById('routeDuration').innerText = durationStr;
+
+      const modeNames = { driving: 'រថយន្ត / ម៉ូតូ', bike: 'កង់', foot: 'ដើរ' };
+      document.getElementById('routeModeBadge').innerText = modeNames[currentTravelMode] || 'Driving';
+
+      document.getElementById('routeSummaryCard').classList.remove('hidden');
+    }
+
+    function translateInstruction(step) {
+      const type = step.maneuver.type;
+      const modifier = step.maneuver.modifier;
+      const name = step.name ? `ផ្លូវ "${step.name}"` : 'ផ្លូវ';
+
+      if (type === 'depart') return `ចាប់ផ្តើមចេញដំណើរតាម ${name}`;
+      if (type === 'arrive') return `បានទៅដល់គោលដៅ 3D របស់អ្នក`;
+
+      let turn = 'បត់';
+      if (modifier === 'left') turn = 'បត់ឆ្វេង';
+      if (modifier === 'right') turn = 'បត់ស្តាំ';
+      if (modifier === 'slight left') turn = 'បត់ឆ្វេងបន្តិច';
+      if (modifier === 'slight right') turn = 'បត់ស្តាំបន្តិច';
+      if (modifier === 'straight') turn = 'ត្រង់ទៅមុខ';
+      if (modifier === 'uturn') turn = 'ត្រឡប់ក្រោយ (U-Turn)';
+
+      return `${turn} ចូល ${name}`;
+    }
+
+    function displayTurnByTurnInstructions(steps) {
+      const container = document.getElementById('instructionsList');
+      container.innerHTML = '';
+      document.getElementById('stepCount').innerText = `${steps.length} ជំហាន`;
+
+      steps.forEach((step, index) => {
+        const textKm = step.distance > 1000 ? `${(step.distance/1000).toFixed(2)} គ.ម` : `${Math.round(step.distance)} ម`;
+        const khText = translateInstruction(step);
+
+        const stepEl = document.createElement('div');
+        stepEl.className = 'py-2 flex items-start gap-2.5 hover:bg-slate-800/50 px-2 rounded-lg transition-colors';
+        stepEl.innerHTML = `
+          <div class="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5 border border-indigo-500/30">
+            ${index + 1}
+          </div>
+          <div class="flex-1">
+            <p class="font-medium text-slate-200 leading-snug">${khText}</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">${textKm}</p>
+          </div>
+        `;
+        container.appendChild(stepEl);
+      });
+
+      document.getElementById('instructionsContainer').classList.remove('hidden');
+    }
+
+    function showRouteError(msg) {
+      document.getElementById('routeErrorMsg').innerText = msg;
+      document.getElementById('routeError').classList.remove('hidden');
+    }
+
+    // --- Search Autocomplete ---
+    function setupAutocomplete(inputId, suggestionsId, onSelect) {
+      const input = document.getElementById(inputId);
+      const suggestionsBox = document.getElementById(suggestionsId);
+
+      input.addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 2) {
+          suggestionsBox.classList.add('hidden');
+          return;
+        }
+
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=kh&limit=5&addressdetails=1`;
+
+          fetch(url)
+            .then(res => res.json())
+            .then(data => {
+              suggestionsBox.innerHTML = '';
+              if (data.length === 0) {
+                suggestionsBox.classList.add('hidden');
+                return;
+              }
+
+              data.forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'p-2.5 hover:bg-indigo-900/40 cursor-pointer transition-colors';
+                itemEl.innerHTML = `
+                  <div class="font-medium text-slate-200 truncate">${item.display_name.split(',')[0]}</div>
+                  <div class="text-[10px] text-slate-400 truncate">${item.display_name}</div>
+                `;
+                itemEl.addEventListener('click', () => {
+                  input.value = item.display_name.split(',')[0];
+                  suggestionsBox.classList.add('hidden');
+                  onSelect(parseFloat(item.lat), parseFloat(item.lon), item.display_name.split(',')[0]);
+                });
+                suggestionsBox.appendChild(itemEl);
+              });
+
+              suggestionsBox.classList.remove('hidden');
+            });
+        }, 300);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !suggestionsBox.contains(e.target)) {
+          suggestionsBox.classList.add('hidden');
+        }
+      });
+    }
+
+    // --- Reset Map & State ---
+    function resetAll() {
+      if (startMarker) startMarker.remove();
+      if (endMarker) endMarker.remove();
+
+      startMarker = null;
+      endMarker = null;
+      startCoords = null;
+      endCoords = null;
+
+      document.getElementById('startInput').value = '';
+      document.getElementById('endInput').value = '';
+      document.getElementById('clearStartBtn').classList.add('hidden');
+      document.getElementById('clearEndBtn').classList.add('hidden');
+
+      if (map.getSource('route')) {
+        map.getSource('route').setData({ type: 'FeatureCollection', features: [] });
+      }
+
+      document.getElementById('routeSummaryCard').classList.add('hidden');
+      document.getElementById('instructionsContainer').classList.add('hidden');
+      document.getElementById('routeError').classList.add('hidden');
+
+      map.flyTo({ center: [104.9282, 11.5564], zoom: 15, pitch: 55, bearing: -17 });
+    }
+
+    // --- DOM Loaded Setup ---
+    window.addEventListener('DOMContentLoaded', () => {
+      init3DMap();
+
+      setupAutocomplete('startInput', 'startSuggestions', (lat, lng, name) => {
+        setStartLocation(lat, lng, name);
+        map.flyTo({ center: [lng, lat], zoom: 16, pitch: 50 });
+      });
+
+      setupAutocomplete('endInput', 'endSuggestions', (lat, lng, name) => {
+        setEndLocation(lat, lng, name);
+      });
+
+      // Clear buttons
+      document.getElementById('clearStartBtn').onclick = () => {
+        if (startMarker) startMarker.remove();
+        startMarker = null;
+        startCoords = null;
+        document.getElementById('startInput').value = '';
+        document.getElementById('clearStartBtn').classList.add('hidden');
+      };
+
+      document.getElementById('clearEndBtn').onclick = () => {
+        if (endMarker) endMarker.remove();
+        endMarker = null;
+        endCoords = null;
+        document.getElementById('endInput').value = '';
+        document.getElementById('clearEndBtn').classList.add('hidden');
+      };
+
+      // Swap button
+      document.getElementById('swapLocationsBtn').onclick = () => {
+        if (!startCoords && !endCoords) return;
+        const temp = startCoords;
+        startCoords = endCoords;
+        endCoords = temp;
+
+        const val = document.getElementById('startInput').value;
+        document.getElementById('startInput').value = document.getElementById('endInput').value;
+        document.getElementById('endInput').value = val;
+
+        if (startCoords) setStartLocation(startCoords.lat, startCoords.lng, startCoords.name);
+        if (endCoords) setEndLocation(endCoords.lat, endCoords.lng, endCoords.name);
+      };
+
+      // Mode Switch
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.mode-btn').forEach(b => {
+            b.classList.remove('bg-indigo-600', 'text-white', 'shadow-md');
+            b.classList.add('text-slate-400');
+          });
+
+          this.classList.add('bg-indigo-600', 'text-white', 'shadow-md');
+          this.classList.remove('text-slate-400');
+
+          currentTravelMode = this.getAttribute('data-mode');
+          calculate3DRoute();
+        });
+      });
+
+      // Preset landmark buttons
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const lat = parseFloat(this.getAttribute('data-lat'));
+          const lng = parseFloat(this.getAttribute('data-lng'));
+          const name = this.getAttribute('data-name');
+
+          if (!startCoords) {
+            setStartLocation(lat, lng, name);
+            map.flyTo({ center: [lng, lat], zoom: 16, pitch: 55 });
+          } else {
+            setEndLocation(lat, lng, name);
+          }
+        });
+      });
+
+      // 3D View Control Toolbar Actions
+      document.getElementById('btnResetCamera').onclick = () => {
+        map.easeTo({ pitch: 55, bearing: 0, zoom: 15 });
+      };
+
+      document.getElementById('btnToggle3D').onclick = () => {
+        is3DEnabled = !is3DEnabled;
+        map.easeTo({ pitch: is3DEnabled ? 60 : 0 });
+      };
+
+      document.getElementById('clearRouteBtn').onclick = resetAll;
+
+      document.getElementById('useCurrentLocBtn').onclick = () => {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(pos => {
+            const { latitude, longitude } = pos.coords;
+            setStartLocation(latitude, longitude, 'ទីតាំងបច្ចុប្បន្នរបស់អ្នក');
+            map.flyTo({ center: [longitude, latitude], zoom: 16, pitch: 55 });
+          });
+        }
+      };
+
+      // Mobile Sidebar Toggle
+      const sidebar = document.getElementById('sidebar');
+      document.getElementById('toggleSidebarBtn').onclick = () => {
+        sidebar.classList.toggle('-translate-x-full');
+      };
+      document.getElementById('closeSidebarMobile').onclick = () => {
+        sidebar.classList.add('-translate-x-full');
+      };
+
+      // Auto hide hint
+      setTimeout(() => {
+        const hint = document.getElementById('mapInstructionHint');
+        if (hint) hint.style.opacity = '0';
+      }, 8000);
+    });
+  </script>
+</body>
+</html>
